@@ -1161,3 +1161,428 @@ h1, h2, h3, h4 {
   box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
 }
 
+/* ==========================================================================
+   Active Dossier Header Bar
+   ========================================================================== */
+.active-dossier-bar {
+  background: linear-gradient(90deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.9));
+  border-bottom: 1px solid var(--border-color);
+  padding: 10px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  z-index: 40;
+}
+
+.dossier-identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.dossier-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+  font-size: 1.1rem;
+}
+
+.dossier-info h3 {
+  font-size: 0.98rem;
+  color: #fff;
+  line-height: 1.2;
+}
+
+.dossier-info p {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.dossier-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dossier-selector-select {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  transition: var(--transition);
+}
+
+.dossier-selector-select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 10px var(--primary-glow);
+}
+
+.score-badge-mini {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: var(--radius-full);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--success);
+}
+
+/* ==========================================================================
+   Toast Notification System
+   ========================================================================== */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.toast-item {
+  pointer-events: auto;
+  min-width: 320px;
+  max-width: 440px;
+  padding: 14px 18px;
+  border-radius: var(--radius-md);
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  animation: toastSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transition: all 0.25s ease;
+}
+
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.toast-item.success {
+  border-left: 4px solid var(--success);
+}
+.toast-item.error {
+  border-left: 4px solid var(--danger);
+}
+.toast-item.warning {
+  border-left: 4px solid var(--warning);
+}
+.toast-item.info {
+  border-left: 4px solid var(--primary);
+}
+
+.toast-icon {
+  font-size: 1.15rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.toast-content {
+  flex: 1;
+}
+
+.toast-title {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 2px;
+}
+
+.toast-msg {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.toast-close {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 2px;
+  border-radius: 4px;
+  transition: var(--transition);
+}
+
+.toast-close:hover {
+  color: #fff;
+}
+
+/* ==========================================================================
+   Interactive Drag & Drop Proof Dropzone
+   ========================================================================== */
+.dropzone-box {
+  border: 2px dashed rgba(148, 163, 184, 0.25);
+  border-radius: var(--radius-lg);
+  padding: 28px 20px;
+  text-align: center;
+  background: rgba(15, 23, 42, 0.4);
+  transition: var(--transition);
+  cursor: pointer;
+  position: relative;
+}
+
+.dropzone-box:hover,
+.dropzone-box.drag-active {
+  border-color: var(--primary);
+  background: rgba(56, 189, 248, 0.06);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.15);
+}
+
+.dropzone-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 12px;
+  border-radius: var(--radius-full);
+  background: rgba(56, 189, 248, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+  font-size: 1.4rem;
+  transition: transform 0.2s ease;
+}
+
+.dropzone-box:hover .dropzone-icon {
+  transform: translateY(-3px) scale(1.05);
+}
+
+.dropzone-label {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 4px;
+}
+
+.dropzone-sub {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.file-preview-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #fff;
+  font-size: 0.82rem;
+  margin-top: 12px;
+}
+
+/* ==========================================================================
+   Missing Document Direct Resolution Action
+   ========================================================================== */
+.checklist-item-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(245, 158, 11, 0.25);
+  gap: 12px;
+}
+
+.btn-resolve-proof {
+  background: linear-gradient(135deg, #0284c7, #38bdf8);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 6px 14px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: var(--transition);
+  box-shadow: 0 2px 8px rgba(56, 189, 248, 0.25);
+}
+
+.btn-resolve-proof:hover {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(56, 189, 248, 0.4);
+}
+
+/* ==========================================================================
+   Document Proof Inspector Modal
+   ========================================================================== */
+.inspector-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-color);
+  padding: 0 24px;
+  margin-bottom: 16px;
+}
+
+.inspector-tab-btn {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 10px 16px;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inspector-tab-btn:hover {
+  color: #fff;
+}
+
+.inspector-tab-btn.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  font-weight: 600;
+}
+
+.forensic-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.forensic-stat {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 12px;
+}
+
+.forensic-label {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+
+.forensic-val {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #fff;
+  word-break: break-all;
+}
+
+.code-stream-viewer {
+  background: #060911;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.78rem;
+  color: #e2e8f0;
+  max-height: 420px;
+  overflow-y: auto;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.search-stream-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.search-stream-input {
+  flex: 1;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  color: #fff;
+  font-size: 0.8rem;
+  outline: none;
+}
+
+.search-stream-input:focus {
+  border-color: var(--primary);
+}
+
+/* ==========================================================================
+   Confirmation Modal
+   ========================================================================== */
+.confirm-box {
+  background: rgba(18, 26, 45, 0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.7);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  max-width: 440px;
+  width: 90%;
+  text-align: center;
+  animation: toastSlideIn 0.25s ease forwards;
+}
+
+.confirm-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: var(--radius-full);
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--warning);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  margin: 0 auto 14px;
+}
+
+.confirm-title {
+  font-size: 1.1rem;
+  color: #fff;
+  margin-bottom: 8px;
+}
+
+.confirm-desc {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+  margin-bottom: 20px;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
+

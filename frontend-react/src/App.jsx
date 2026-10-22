@@ -16,7 +16,15 @@ import {
   Cpu, 
   ExternalLink,
   PlusCircle,
-  Check
+  Check,
+  Copy,
+  FileUp,
+  FileCheck,
+  X,
+  Search,
+  Building2,
+  Sparkles,
+  Info
 } from 'lucide-react';
 
 export default function App() {
@@ -31,8 +39,42 @@ export default function App() {
   const [llmEnabled, setLlmEnabled] = useState(true);
   const [modelConfig, setModelConfig] = useState(null);
 
-  // Modal State
-  const [modalDoc, setModalDoc] = useState(null);
+  // Toast Notification State
+  const [toasts, setToasts] = useState([]);
+
+  function showToast(title, message, type = 'info', duration = 4500) {
+    const id = Date.now() + Math.random();
+    setToasts(prev => [...prev, { id, title, message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, duration);
+  }
+
+  function dismissToast(id) {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }
+
+  // Confirmation Modal State
+  const [confirmDialog, setConfirmDialog] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: 'Confirm',
+    confirmAction: () => {}
+  });
+
+  // Proof Upload Modal State
+  const [isProofModalOpen, setIsProofModalOpen] = useState(false);
+  const [proofType, setProofType] = useState('LAND_REGISTRATION');
+  const [proofCategoryName, setProofCategoryName] = useState('');
+  const [proofFile, setProofFile] = useState(null);
+  const [isUploadingProof, setIsUploadingProof] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  // Document Inspector Modal State
+  const [inspectorDoc, setInspectorDoc] = useState(null);
+  const [inspectorTab, setInspectorTab] = useState('forensic');
+  const [textSearch, setTextSearch] = useState('');
 
   // Add College Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -84,67 +126,6 @@ export default function App() {
     });
   }
 
-  async function handleAddCollegeSubmit(e) {
-    e.preventDefault();
-    setIsAdding(true);
-    try {
-      const payload = {
-        application_number: addForm.application_number || `AICTE/2024/APP-${Math.floor(1000 + Math.random() * 9000)}`,
-        institution_name: addForm.institution_name,
-        institution_type: addForm.institution_type,
-        application_type: addForm.application_type,
-        state: addForm.state,
-        district: addForm.district,
-        address: addForm.address,
-        programs: [
-          {
-            program_name: addForm.program_name,
-            level: addForm.level,
-            approved_intake: parseInt(addForm.approved_intake, 10) || 60
-          }
-        ],
-        land_detail: {
-          total_area_acres: parseFloat(addForm.total_area_acres) || 8.0,
-          is_single_plot: Boolean(addForm.is_single_plot),
-          survey_khasra_no: addForm.survey_khasra_no,
-          land_registration_date: addForm.land_registration_date
-        },
-        builtup_detail: {
-          total_carpet_sqm: parseFloat(addForm.total_carpet_sqm) || 8500.0,
-          instructional_area_sqm: parseFloat(addForm.instructional_area_sqm) || 4500.0,
-          administrative_area_sqm: parseFloat(addForm.administrative_area_sqm) || 2000.0,
-          amenities_area_sqm: parseFloat(addForm.amenities_area_sqm) || 2000.0
-        },
-        test_scenario: addForm.test_scenario,
-        auto_validate: true
-      };
-
-      const res = await fetch('/applications', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Failed to create college');
-      }
-
-      const created = await res.json();
-      setIsAddModalOpen(false);
-
-      // Refresh applications and select new college
-      await fetchApplications();
-      setCurrentAppId(created.id);
-      setActiveTab('verdict');
-      await fetchVerdict(created.id);
-    } catch (err) {
-      alert('Error creating institution: ' + err.message);
-    } finally {
-      setIsAdding(false);
-    }
-  }
-
   // Chat State
   const [chatMessages, setChatMessages] = useState([
     {
@@ -156,10 +137,10 @@ export default function App() {
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
 
-  // Upload Form State
-  const [uploadType, setUploadType] = useState('LAND_REGISTRATION');
-  const [uploadFile, setUploadFile] = useState(null);
-  const [uploading, setUploading] = useState(false);
+  // Vault Inline Upload Form State
+  const [vaultUploadType, setVaultUploadType] = useState('LAND_REGISTRATION');
+  const [vaultUploadFile, setVaultUploadFile] = useState(null);
+  const [vaultIsDragOver, setVaultIsDragOver] = useState(false);
 
   // 1. Initial Load
   useEffect(() => {
@@ -287,8 +268,9 @@ export default function App() {
       await fetchApplications();
       await fetchVerdict(currentAppId);
       setActiveTab('verdict');
+      showToast('Statutory Audit Completed', `Scrutiny Run ${data.id.substring(0, 8)} finalized for ${currentApp?.institution_name}`, 'success');
     } catch (e) {
-      alert('Audit failed: ' + e.message);
+      showToast('Audit Failed', e.message, 'error');
     } finally {
       setLoading(false);
     }
@@ -300,64 +282,161 @@ export default function App() {
       const res = await fetch(`/agent/config/toggle-llm?enable=${nextState}`, { method: 'POST' });
       const data = await res.json();
       setLlmEnabled(data.llm_enabled);
+      showToast(
+        data.llm_enabled ? 'LLM Mode Active' : 'Deterministic Mode Active',
+        data.llm_enabled ? 'Qwen 2.5 local inference engine enabled for scrutiny assistant.' : 'Fast deterministic rule engine only (fail-closed).',
+        'info'
+      );
     } catch (e) {
-      console.error(e);
+      showToast('Failed to toggle model', e.message, 'error');
     }
   }
 
-  async function handleReseed() {
-    if (!window.confirm('Reset and re-seed the benchmark databases with 3 diverse applications?')) return;
-    setLoading(true);
-    try {
-      const res = await fetch('/system/reseed', { method: 'POST' });
-      if (res.ok) {
-        alert('Benchmark applications & synthetic PDFs re-seeded successfully!');
-        await fetchApplications();
+  function handleReseedClick() {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Reset & Re-seed Benchmarks?',
+      message: 'This will reset the application dossier database and provision 3 diverse benchmark institutions (Compliant, Area Deficit, and Tampered) with synthetic PDFs.',
+      confirmText: 'Yes, Re-seed Benchmarks',
+      confirmAction: async () => {
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        setLoading(true);
+        try {
+          const res = await fetch('/system/reseed', { method: 'POST' });
+          if (res.ok) {
+            showToast('Benchmarks Re-seeded', 'Database refreshed with 3 benchmark institutions and PDF proofs.', 'success');
+            await fetchApplications();
+          }
+        } catch (e) {
+          showToast('Reseed Failed', e.message, 'error');
+        } finally {
+          setLoading(false);
+        }
       }
-    } catch (e) {
-      alert('Reseed failed: ' + e.message);
-    } finally {
-      setLoading(false);
-    }
+    });
   }
 
-  async function handleUploadSubmit(e) {
-    e.preventDefault();
-    if (!uploadFile || !currentAppId) return;
+  // Map Missing Item Name to Allowed Document Type
+  function getDocTypeFromMissingName(name = '') {
+    const lower = name.toLowerCase();
+    if (lower.includes('land') || lower.includes('title') || lower.includes('deed')) return 'LAND_REGISTRATION';
+    if (lower.includes('building') || lower.includes('plan')) return 'BUILDING_PLAN_APPROVAL';
+    if (lower.includes('fire')) return 'FIRE_SAFETY_NOC';
+    if (lower.includes('trust') || lower.includes('affidavit') || lower.includes('society')) return 'AFFIDAVIT_TRUST';
+    if (lower.includes('architect') || lower.includes('barrier')) return 'ARCHITECT_CERTIFICATE';
+    return 'SUPPORTING_ATTACHMENT';
+  }
 
-    setUploading(true);
+  // Open Proof Upload Modal with Pre-filled Type
+  function openProofModalForMissingItem(name) {
+    const type = getDocTypeFromMissingName(name);
+    setProofType(type);
+    setProofCategoryName(name);
+    setProofFile(null);
+    setIsProofModalOpen(true);
+  }
+
+  // Execute Proof Upload & Auto Re-validation
+  async function executeProofUpload(file, docType) {
+    if (!file) {
+      showToast('No File Selected', 'Please drop or choose a statutory PDF proof file.', 'warning');
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      showToast('Invalid Format', 'Only PDF statutory documents are accepted.', 'error');
+      return;
+    }
+    if (!currentAppId) {
+      showToast('No Application', 'Please select an application dossier first.', 'warning');
+      return;
+    }
+
+    setIsUploadingProof(true);
     const formData = new FormData();
-    formData.append('document_type', uploadType);
-    formData.append('file', uploadFile);
+    formData.append('document_type', docType);
+    formData.append('file', file);
 
     try {
+      // 1. Upload proof
       const res = await fetch(`/applications/${currentAppId}/documents/upload`, {
         method: 'POST',
         body: formData
       });
-      if (res.ok) {
-        alert('Document uploaded, verified, and digested into dossier!');
-        setUploadFile(null);
-        fetchDocuments(currentAppId);
-        fetchApplications();
-      } else {
+
+      if (!res.ok) {
         const err = await res.json();
-        alert('Upload rejected: ' + (err.detail || 'Error'));
+        throw new Error(err.detail || 'Upload failed');
       }
+
+      const uploaded = await res.json();
+
+      // 2. Automatically trigger validation to update 'What's Missing' & Verdict
+      const valRes = await fetch(`/applications/${currentAppId}/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ engine_mode: llmEnabled ? 'HYBRID_WITH_LLM' : 'DETERMINISTIC_RULES' })
+      });
+      const valData = await valRes.json();
+      setCurrentRunId(valData.id);
+
+      // 3. Refresh live status, verdict, and documents
+      await fetchDocuments(currentAppId);
+      await fetchVerdict(currentAppId);
+      await fetchApplications();
+      await fetchAppStatus(currentAppId);
+
+      showToast(
+        'Proof Analyzed & Deficiency Cleared',
+        `${uploaded.document_type} successfully digested (SHA-256: ${uploaded.sha256_hash.substring(0, 12)}...). Statutory audit updated!`,
+        'success',
+        6000
+      );
+
+      setIsProofModalOpen(false);
+      setProofFile(null);
+      setVaultUploadFile(null);
     } catch (err) {
-      alert('Upload error: ' + err.message);
+      showToast('Upload / Audit Error', err.message, 'error');
     } finally {
-      setUploading(false);
+      setIsUploadingProof(false);
     }
+  }
+
+  // Open Document Proof Inspector
+  async function openInspector(doc) {
+    try {
+      const res = await fetch(`/documents/${doc.id}`);
+      if (res.ok) {
+        const fullDoc = await res.json();
+        let parsedMeta = {};
+        try {
+          parsedMeta = fullDoc.metadata_json ? JSON.parse(fullDoc.metadata_json) : {};
+        } catch (e) {}
+        setInspectorDoc({ ...fullDoc, meta: parsedMeta });
+      } else {
+        setInspectorDoc({ ...doc, meta: {} });
+      }
+    } catch (e) {
+      setInspectorDoc({ ...doc, meta: {} });
+    }
+    setInspectorTab('forensic');
+    setTextSearch('');
   }
 
   async function handleClassifyDoc(docId) {
     try {
+      showToast('Classification In Progress', 'SA-01 Subagent is inspecting document classification...', 'info');
       const res = await fetch(`/agent/classify/${docId}`, { method: 'POST' });
       const data = await res.json();
-      alert(`SA-01 Classification Report:\n• Declared Type: ${data.declared_type}\n• Verified Type: ${data.verified_type}\n• Confidence: ${(data.confidence * 100).toFixed(0)}%\n• Consistency: ${data.is_consistent ? 'MATCH' : 'MISMATCH'}\n\n${data.explanation}`);
+      const isMatch = data.is_consistent;
+      showToast(
+        `SA-01: ${isMatch ? 'Verified Match' : 'Mismatch Detected'}`,
+        `Declared: ${data.declared_type} • Verified: ${data.verified_type} (${(data.confidence * 100).toFixed(0)}% confidence). ${data.explanation}`,
+        isMatch ? 'success' : 'warning',
+        7000
+      );
     } catch (e) {
-      alert('Classification agent error: ' + e.message);
+      showToast('Classification Error', e.message, 'error');
     }
   }
 
@@ -376,7 +455,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           application_id: currentAppId,
-          question: query,
+          query: query,
           include_statutory_citations: true
         })
       });
@@ -401,6 +480,72 @@ export default function App() {
     }
   }
 
+  async function handleAddCollegeSubmit(e) {
+    e.preventDefault();
+    setIsAdding(true);
+    try {
+      const payload = {
+        application_number: addForm.application_number || `AICTE/2024/APP-${Math.floor(1000 + Math.random() * 9000)}`,
+        institution_name: addForm.institution_name,
+        institution_type: addForm.institution_type,
+        application_type: addForm.application_type,
+        state: addForm.state,
+        district: addForm.district,
+        address: addForm.address,
+        programs: [
+          {
+            program_name: addForm.program_name,
+            level: addForm.level,
+            approved_intake: parseInt(addForm.approved_intake, 10) || 60
+          }
+        ],
+        land_detail: {
+          total_area_acres: parseFloat(addForm.total_area_acres) || 8.0,
+          is_single_plot: Boolean(addForm.is_single_plot),
+          survey_khasra_no: addForm.survey_khasra_no,
+          land_registration_date: addForm.land_registration_date
+        },
+        builtup_detail: {
+          total_carpet_sqm: parseFloat(addForm.total_carpet_sqm) || 8500.0,
+          instructional_area_sqm: parseFloat(addForm.instructional_area_sqm) || 4500.0,
+          administrative_area_sqm: parseFloat(addForm.administrative_area_sqm) || 2000.0,
+          amenities_area_sqm: parseFloat(addForm.amenities_area_sqm) || 2000.0
+        },
+        test_scenario: addForm.test_scenario,
+        auto_validate: true
+      };
+
+      const res = await fetch('/applications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Failed to create college');
+      }
+
+      const created = await res.json();
+      setIsAddModalOpen(false);
+
+      await fetchApplications();
+      setCurrentAppId(created.id);
+      setActiveTab('verdict');
+      await fetchVerdict(created.id);
+
+      showToast(
+        'Institution Registered',
+        `Application for "${created.institution_name}" provisioned and statutory audit executed.`,
+        'success'
+      );
+    } catch (err) {
+      showToast('Registration Error', err.message, 'error');
+    } finally {
+      setIsAdding(false);
+    }
+  }
+
   // Active App Object
   const currentApp = applications.find(a => a.id === currentAppId);
   const currentStatus = appStatusMap[currentAppId] || {};
@@ -412,6 +557,25 @@ export default function App() {
 
   return (
     <div className="app-layout">
+      {/* Toast Notification Container */}
+      <div className="toast-container">
+        {toasts.map(t => (
+          <div key={t.id} className={`toast-item ${t.type}`}>
+            <div className="toast-icon">
+              {t.type === 'success' && '✅'}
+              {t.type === 'error' && '❌'}
+              {t.type === 'warning' && '⚠️'}
+              {t.type === 'info' && '💡'}
+            </div>
+            <div className="toast-content">
+              <div className="toast-title">{t.title}</div>
+              <div className="toast-msg">{t.message}</div>
+            </div>
+            <button className="toast-close" onClick={() => dismissToast(t.id)}>✕</button>
+          </div>
+        ))}
+      </div>
+
       {/* Top Navbar */}
       <header className="top-nav">
         <div className="brand">
@@ -452,6 +616,67 @@ export default function App() {
           </a>
         </div>
       </header>
+
+      {/* Active Scrutiny Dossier Header Bar */}
+      {currentApp && (
+        <div className="active-dossier-bar">
+          <div className="dossier-identity">
+            <div className="dossier-icon">🏛️</div>
+            <div className="dossier-info">
+              <h3>{currentApp.institution_name}</h3>
+              <p>
+                {currentApp.district}, {currentApp.state} • App ID: <strong>{currentApp.application_number}</strong>
+              </p>
+            </div>
+          </div>
+
+          <div className="dossier-meta">
+            {/* Quick Switcher */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Switch Dossier:</span>
+              <select 
+                className="dossier-selector-select"
+                value={currentAppId || ''} 
+                onChange={(e) => setCurrentAppId(e.target.value)}
+              >
+                {applications.map(app => (
+                  <option key={app.id} value={app.id}>
+                    {app.institution_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Overall Readiness Pill */}
+            <span className={`readiness-pill ${currentStatus.overall_readiness || 'PENDING'}`}>
+              ● {currentStatus.overall_readiness || 'PENDING'}
+            </span>
+
+            {/* Compliance Score Pill */}
+            {verdict && (
+              <div className="score-badge-mini">
+                <Sparkles size={13} />
+                <span>{verdict.compliance_score_percent}% Compliant</span>
+              </div>
+            )}
+
+            {/* Quick Upload Proof Button */}
+            <button 
+              className="btn btn-primary"
+              style={{ padding: '5px 12px', fontSize: '0.78rem' }}
+              onClick={() => {
+                setProofType('LAND_REGISTRATION');
+                setProofCategoryName('Statutory Proof Document');
+                setProofFile(null);
+                setIsProofModalOpen(true);
+              }}
+            >
+              <Upload size={13} style={{ display: 'inline', marginRight: 4 }} />
+              Upload Proof
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="body-container">
         {/* Sidebar */}
@@ -495,6 +720,7 @@ export default function App() {
               >
                 <FolderLock size={18} />
                 <span>Documents Vault</span>
+                <span className="badge">{documents.length}</span>
               </button>
 
               <button 
@@ -508,23 +734,6 @@ export default function App() {
           </div>
 
           <div className="sidebar-footer">
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 6 }}>
-                Active Scrutiny Dossier:
-              </label>
-              <select 
-                className="styled-select" 
-                value={currentAppId || ''} 
-                onChange={(e) => setCurrentAppId(e.target.value)}
-              >
-                {applications.map(app => (
-                  <option key={app.id} value={app.id}>
-                    {app.institution_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             <div className="system-indicator">
               <span className="pulse-indicator"></span>
               <span>Local Model Vault: /models</span>
@@ -546,7 +755,7 @@ export default function App() {
                   <button className="btn btn-success" onClick={() => { resetAddForm(); setIsAddModalOpen(true); }}>
                     <PlusCircle size={15} /> Add College / Run Test
                   </button>
-                  <button className="btn btn-secondary" onClick={handleReseed} disabled={loading}>
+                  <button className="btn btn-secondary" onClick={handleReseedClick} disabled={loading}>
                     <RefreshCw size={15} /> Re-seed Benchmarks
                   </button>
                   <button className="btn btn-primary" onClick={handleRunAudit} disabled={loading}>
@@ -600,48 +809,69 @@ export default function App() {
                   const isSelected = app.id === currentAppId;
 
                   return (
-                    <div key={app.id} className={`app-card ${isSelected ? 'selected' : ''}`}>
-                      <div className="app-card-header">
-                        <span className="app-number">{app.application_number}</span>
+                    <div 
+                      key={app.id} 
+                      className={`app-card ${isSelected ? 'selected' : ''}`}
+                      onClick={() => setCurrentAppId(app.id)}
+                    >
+                      <div className="app-card-top">
+                        <span className="app-num">{app.application_number}</span>
                         <span className={`readiness-pill ${s.overall_readiness}`}>
-                          {s.overall_readiness.replace(/_/g, ' ')}
+                          {s.overall_readiness}
                         </span>
                       </div>
 
                       <h3 className="app-name">{app.institution_name}</h3>
-                      <p className="app-location">
-                        📍 {app.district}, {app.state} • {app.institution_type.replace(/_/g, ' ')}
-                      </p>
+                      <div className="app-location">
+                        📍 {app.district}, {app.state}
+                      </div>
 
-                      <div className="app-stats-row">
-                        <div>
-                          <span className="stat-label">Uploaded Docs</span>
-                          <strong>{s.documents_count} / {s.required_documents_count}</strong>
+                      <div className="app-specs">
+                        <div className="spec-item">
+                          <span className="spec-k">Type:</span>
+                          <span className="spec-v">{app.institution_type.replace('_', ' ')}</span>
                         </div>
-                        <div>
-                          <span className="stat-label">Missing Items</span>
-                          <strong style={{ color: s.missing_documents_count > 0 ? 'var(--warning)' : 'var(--success)' }}>
-                            {s.missing_documents_count}
-                          </strong>
+                        <div className="spec-item">
+                          <span className="spec-k">Land Area:</span>
+                          <span className="spec-v">{app.land_detail?.total_area_acres || 0} Acres</span>
                         </div>
-                        <div>
-                          <span className="stat-label">Status</span>
-                          <strong>{s.current_status.replace(/_/g, ' ')}</strong>
+                        <div className="spec-item">
+                          <span className="spec-k">Carpet Area:</span>
+                          <span className="spec-v">{app.builtup_detail?.total_carpet_sqm?.toLocaleString() || 0} sq.m</span>
+                        </div>
+                        <div className="spec-item">
+                          <span className="spec-k">Proofs Uploaded:</span>
+                          <span className="spec-v">
+                            {s.documents_count} / {s.required_documents_count || 5}
+                            {s.missing_documents_count > 0 && (
+                              <span style={{ color: 'var(--warning)', marginLeft: 4 }}>
+                                ({s.missing_documents_count} missing)
+                              </span>
+                            )}
+                          </span>
                         </div>
                       </div>
 
                       <div className="app-card-actions">
                         <button 
-                          className="btn btn-secondary" 
-                          onClick={() => { setCurrentAppId(app.id); }}
+                          className="btn btn-secondary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCurrentAppId(app.id);
+                            setActiveTab('verdict');
+                          }}
                         >
-                          Select Dossier
+                          <Scale size={14} /> View Judgment
                         </button>
                         <button 
-                          className="btn btn-primary" 
-                          onClick={() => { setCurrentAppId(app.id); setActiveTab('verdict'); }}
+                          className="btn btn-primary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCurrentAppId(app.id);
+                            handleRunAudit();
+                          }}
                         >
-                          View Judgment
+                          <Zap size={14} /> Audit
                         </button>
                       </div>
                     </div>
@@ -651,7 +881,7 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 2: Final Judgment Verdict */}
+          {/* TAB 2: Final Judgment & Actionable Readiness */}
           {activeTab === 'verdict' && (
             <div>
               <div className="section-header">
@@ -659,36 +889,42 @@ export default function App() {
                   <h2>Final Statutory Judgment & Actionable Readiness</h2>
                   <p>Comprehensive determination of statutory readiness, missing documents, and required remediations.</p>
                 </div>
-                <button className="btn btn-primary" onClick={handleRunAudit} disabled={loading}>
-                  <RefreshCw size={15} /> Re-Evaluate Application
-                </button>
+                <div>
+                  <button className="btn btn-primary" onClick={handleRunAudit} disabled={loading}>
+                    <RefreshCw size={14} /> Re-Evaluate Application
+                  </button>
+                </div>
               </div>
 
-              {loading && <div style={{ color: 'var(--primary)', padding: 20 }}>Evaluating AICTE statutory rules...</div>}
-
-              {verdict && !loading && (
+              {loading || !verdict ? (
+                <div className="glass-card" style={{ textAlign: 'center', padding: 60 }}>
+                  <div className="spinner" style={{ margin: '0 auto 16px' }}></div>
+                  <h3 style={{ color: '#fff' }}>Synthesizing Statutory Judgment...</h3>
+                  <p style={{ color: 'var(--text-muted)' }}>Executing AICTE APH 2024-25 rule engine and analyzing uploaded proofs.</p>
+                </div>
+              ) : (
                 <>
-                  {/* Verdict Banner */}
-                  <div className={`verdict-banner ${verdict.overall_readiness}`}>
-                    <div className="verdict-info">
-                      <span className={`readiness-pill ${verdict.overall_readiness}`} style={{ display: 'inline-block', marginBottom: 8 }}>
-                        {verdict.overall_readiness.replace(/_/g, ' ')}
+                  {/* Verdict Headline Card */}
+                  <div className={`verdict-hero-card ${verdict.overall_statutory_readiness}`}>
+                    <div className="hero-content">
+                      <span className={`readiness-pill ${verdict.overall_statutory_readiness}`}>
+                        {verdict.overall_statutory_readiness}
                       </span>
-                      <h3>{verdict.verdict_headline}</h3>
+                      <h2>{verdict.headline}</h2>
                       <p>{verdict.verdict_explanation}</p>
                     </div>
-
-                    <div className="verdict-gauge">
-                      <div className={`gauge-circle ${verdict.overall_readiness}`}>
-                        {verdict.readiness_score_pct}%
+                    <div className="compliance-gauge">
+                      <div className="gauge-circle">
+                        <span className="gauge-val">{verdict.compliance_score_percent}%</span>
                       </div>
-                      <span className="gauge-label">Compliance Norms</span>
+                      <span className="gauge-label">COMPLIANCE NORMS</span>
                     </div>
                   </div>
 
-                  {/* Actionable Checklist */}
+                  {/* Actionable Scrutiny Checklist */}
                   <h3 style={{ fontSize: '1.15rem', color: '#fff', marginBottom: 16 }}>Actionable Scrutiny Checklist</h3>
                   <div className="checklist-grid">
+                    
                     {/* Missing Mandatory Items */}
                     <div className="check-box missing-box">
                       <div className="check-box-header">
@@ -700,15 +936,30 @@ export default function App() {
                       </div>
                       <div>
                         {(!verdict.actionable_checklist.missing_mandatory_documents || verdict.actionable_checklist.missing_mandatory_documents.length === 0) ? (
-                          <p style={{ color: 'var(--success)', fontSize: '0.85rem' }}>
-                            ✓ All 5 statutory mandatory documents are uploaded and accounted for.
-                          </p>
+                          <div style={{ padding: '12px 0', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <CheckCircle size={18} />
+                            <span style={{ fontSize: '0.88rem' }}>All statutory mandatory document proofs are uploaded, analyzed, and accounted for.</span>
+                          </div>
                         ) : (
                           verdict.actionable_checklist.missing_mandatory_documents.map((m, idx) => (
                             <div key={idx} className="checklist-item CRITICAL">
                               <div className="item-title">{m.name}</div>
                               <div className="item-desc">{m.description}</div>
                               <div className="item-mandate">Mandate: {m.regulatory_mandate}</div>
+                              
+                              {/* Direct Proof Upload CTA */}
+                              <div className="checklist-item-action-row">
+                                <span style={{ fontSize: '0.74rem', color: 'var(--danger)', fontWeight: 600 }}>
+                                  ⚠️ Shortfall: Application cannot proceed without this proof.
+                                </span>
+                                <button 
+                                  className="btn-resolve-proof"
+                                  onClick={() => openProofModalForMissingItem(m.name)}
+                                >
+                                  <Upload size={13} />
+                                  Upload Proof PDF
+                                </button>
+                              </div>
                             </div>
                           ))
                         )}
@@ -726,9 +977,10 @@ export default function App() {
                       </div>
                       <div>
                         {(!verdict.actionable_checklist.critical_and_major_deficiencies || verdict.actionable_checklist.critical_and_major_deficiencies.length === 0) ? (
-                          <p style={{ color: 'var(--success)', fontSize: '0.85rem' }}>
-                            ✓ No critical or major norm deficiencies recorded.
-                          </p>
+                          <div style={{ padding: '12px 0', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <CheckCircle size={18} />
+                            <span style={{ fontSize: '0.88rem' }}>No critical or major statutory norm deficiencies recorded.</span>
+                          </div>
                         ) : (
                           verdict.actionable_checklist.critical_and_major_deficiencies.map((d, idx) => (
                             <div key={idx} className={`checklist-item ${d.severity}`}>
@@ -756,7 +1008,7 @@ export default function App() {
                     ))}
                   </div>
 
-                  {/* Passed Checks */}
+                  {/* Verified Passing Norms */}
                   <h3 style={{ fontSize: '1.15rem', color: '#fff', marginBottom: 16 }}>Verified Passing Norms</h3>
                   <ul className="passed-checks-list">
                     {(verdict.actionable_checklist.passed_compliance_checks || []).map((p, idx) => (
@@ -828,18 +1080,22 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Upload Form */}
-              <div className="glass-card">
-                <h3 style={{ fontSize: '1.05rem', color: '#fff', marginBottom: 14 }}>Upload Additional Statutory Document</h3>
-                <form onSubmit={handleUploadSubmit} style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                  <div style={{ flex: 1, minWidth: 240 }}>
+              {/* Upload Dropzone Card */}
+              <div className="glass-card" style={{ marginBottom: 24 }}>
+                <h3 style={{ fontSize: '1.05rem', color: '#fff', marginBottom: 14 }}>
+                  📥 Upload Statutory Proof PDF
+                </h3>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 20 }}>
+                  <div>
                     <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 6 }}>
                       Document Category:
                     </label>
                     <select 
                       className="styled-select" 
-                      value={uploadType} 
-                      onChange={(e) => setUploadType(e.target.value)}
+                      value={vaultUploadType} 
+                      onChange={(e) => setVaultUploadType(e.target.value)}
+                      style={{ width: '100%', marginBottom: 12 }}
                     >
                       <option value="LAND_REGISTRATION">Land Registration / Title Deed</option>
                       <option value="BUILDING_PLAN_APPROVAL">Sanctioned Building Plan Approval</option>
@@ -848,25 +1104,77 @@ export default function App() {
                       <option value="ARCHITECT_CERTIFICATE">Architect Barrier-Free Certificate</option>
                       <option value="SUPPORTING_ATTACHMENT">Supporting Statutory Attachment</option>
                     </select>
+
+                    <p style={{ fontSize: '0.76rem', color: 'var(--text-dim)', lineHeight: 1.4 }}>
+                      AICTE statutory guidelines mandate certified PDF copies with legible seals and registration numbers. Uploading automatically extracts text and re-runs scrutiny validation.
+                    </p>
                   </div>
 
-                  <div style={{ flex: 1, minWidth: 240 }}>
-                    <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 6 }}>
-                      Select PDF File:
-                    </label>
-                    <input 
-                      type="file" 
-                      accept=".pdf" 
-                      required 
-                      onChange={(e) => setUploadFile(e.target.files[0])}
-                      style={{ width: '100%', padding: '6px', background: 'rgba(30,41,59,0.8)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', color: '#fff', fontSize: '0.8rem' }}
-                    />
-                  </div>
+                  {/* Dropzone */}
+                  <div>
+                    <div 
+                      className={`dropzone-box ${vaultIsDragOver ? 'drag-active' : ''}`}
+                      onDragOver={(e) => { e.preventDefault(); setVaultIsDragOver(true); }}
+                      onDragLeave={() => setVaultIsDragOver(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setVaultIsDragOver(false);
+                        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                          setVaultUploadFile(e.dataTransfer.files[0]);
+                        }
+                      }}
+                      onClick={() => document.getElementById('vault-file-input').click()}
+                    >
+                      <input 
+                        id="vault-file-input"
+                        type="file" 
+                        accept=".pdf" 
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            setVaultUploadFile(e.target.files[0]);
+                          }
+                        }}
+                      />
+                      <div className="dropzone-icon">
+                        <FileUp />
+                      </div>
+                      <div className="dropzone-label">
+                        {vaultUploadFile ? vaultUploadFile.name : 'Click to browse or drop statutory PDF proof here'}
+                      </div>
+                      <div className="dropzone-sub">
+                        {vaultUploadFile 
+                          ? `${(vaultUploadFile.size / 1024).toFixed(1)} KB • Ready to Ingest` 
+                          : 'Supports PDF up to 25MB • PyMuPDF / pypdf text extraction + SHA-256'
+                        }
+                      </div>
 
-                  <button type="submit" className="btn btn-primary" disabled={uploading}>
-                    <Upload size={15} /> {uploading ? 'Processing...' : 'Upload & Inspect'}
-                  </button>
-                </form>
+                      {vaultUploadFile && (
+                        <div className="file-preview-pill">
+                          <span>📄 {vaultUploadFile.name}</span>
+                          <button 
+                            type="button" 
+                            style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}
+                            onClick={(e) => { e.stopPropagation(); setVaultUploadFile(null); }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+                      <button 
+                        type="button"
+                        className="btn btn-primary" 
+                        disabled={!vaultUploadFile || isUploadingProof}
+                        onClick={() => executeProofUpload(vaultUploadFile, vaultUploadType)}
+                      >
+                        <Upload size={14} /> {isUploadingProof ? 'Ingesting & Auditing...' : 'Ingest & Re-evaluate'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Documents Table */}
@@ -883,31 +1191,57 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {documents.map(d => (
-                      <tr key={d.id}>
-                        <td><strong>{d.document_type}</strong></td>
-                        <td>{d.original_filename}</td>
-                        <td className="hash-mono">{d.sha256_hash.substring(0, 16)}...</td>
-                        <td>{(d.file_size_bytes / 1024).toFixed(1)} KB</td>
-                        <td><span className="readiness-pill READY_FOR_REVIEW">PROCESSED</span></td>
-                        <td>
-                          <button 
-                            className="btn btn-secondary" 
-                            style={{ padding: '4px 10px', fontSize: '0.76rem', marginRight: 8 }}
-                            onClick={() => setModalDoc(d)}
-                          >
-                            <Eye size={12} style={{ display: 'inline', marginRight: 4 }} /> View Text
-                          </button>
-                          <button 
-                            className="btn btn-secondary" 
-                            style={{ padding: '4px 10px', fontSize: '0.76rem' }}
-                            onClick={() => handleClassifyDoc(d.id)}
-                          >
-                            SA-01 Check
-                          </button>
+                    {documents.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
+                          No documents uploaded yet for this dossier. Drop a PDF proof above to begin scrutiny analysis.
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      documents.map(d => (
+                        <tr key={d.id}>
+                          <td><strong>{d.document_type}</strong></td>
+                          <td>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                              📄 {d.original_filename}
+                            </span>
+                          </td>
+                          <td className="hash-mono">
+                            <span title={d.sha256_hash}>
+                              {d.sha256_hash.substring(0, 16)}...
+                            </span>
+                            <button 
+                              style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', marginLeft: 6 }}
+                              title="Copy full SHA-256"
+                              onClick={() => {
+                                navigator.clipboard.writeText(d.sha256_hash);
+                                showToast('Copied', 'SHA-256 hash copied to clipboard', 'info', 2000);
+                              }}
+                            >
+                              <Copy size={12} />
+                            </button>
+                          </td>
+                          <td>{(d.file_size_bytes / 1024).toFixed(1)} KB</td>
+                          <td><span className="readiness-pill READY_FOR_REVIEW">PROCESSED</span></td>
+                          <td>
+                            <button 
+                              className="btn btn-secondary" 
+                              style={{ padding: '4px 10px', fontSize: '0.76rem', marginRight: 8 }}
+                              onClick={() => openInspector(d)}
+                            >
+                              <Eye size={12} style={{ display: 'inline', marginRight: 4 }} /> Inspect Proof
+                            </button>
+                            <button 
+                              className="btn btn-secondary" 
+                              style={{ padding: '4px 10px', fontSize: '0.76rem' }}
+                              onClick={() => handleClassifyDoc(d.id)}
+                            >
+                              SA-01 Check
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -948,26 +1282,25 @@ export default function App() {
                 <div className="chat-messages">
                   {chatMessages.map((msg, i) => (
                     <div key={i} className={`chat-bubble ${msg.role}`}>
-                      <div className="avatar">{msg.role === 'assistant' ? '💊' : '👤'}</div>
+                      <div className="avatar">
+                        {msg.role === 'user' ? '👤' : '💊'}
+                      </div>
                       <div className="bubble-content">
                         {msg.engine && (
-                          <div style={{ fontSize: '0.72rem', color: 'var(--ai-purple)', marginBottom: 4, fontWeight: 600 }}>
-                            {msg.engine} {msg.latency && `• ${msg.latency.toFixed(0)}ms`}
+                          <div className="engine-tag">
+                            <span>{msg.engine}</span>
+                            {msg.latency && <span>• {msg.latency}ms</span>}
                           </div>
                         )}
-                        <p style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</p>
+                        <div className="bubble-text">{msg.content}</div>
 
-                        {/* Evidentiary Citations */}
                         {msg.sources && msg.sources.length > 0 && (
-                          <div style={{ marginTop: 10 }}>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase' }}>
-                              Statutory Evidence Citations:
-                            </span>
+                          <div className="sources-list">
+                            <span className="sources-label">Statutory Evidence Sources:</span>
                             {msg.sources.map((s, idx) => (
-                              <div key={idx} className="citation-card">
-                                <div className="citation-header">📄 {s.document_name} ({s.clause_or_page})</div>
-                                <div>"{s.extracted_text_snippet}"</div>
-                              </div>
+                              <span key={idx} className="source-pill">
+                                📜 {s}
+                              </span>
                             ))}
                           </div>
                         )}
@@ -1004,28 +1337,313 @@ export default function App() {
         </main>
       </div>
 
-      {/* Document Text Modal */}
-      {modalDoc && (
-        <div className="modal-backdrop" onClick={() => setModalDoc(null)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+      {/* MODAL 1: Upload Statutory Proof Modal (Deficiency Resolver) */}
+      {isProofModalOpen && (
+        <div className="modal-backdrop" onClick={() => !isUploadingProof && setIsProofModalOpen(false)}>
+          <div className="modal-card" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>{modalDoc.document_type} — {modalDoc.original_filename}</h3>
-              <button className="close-modal-btn" onClick={() => setModalDoc(null)}>✕</button>
-            </div>
-            <div className="modal-body">
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: 8 }}>
-                SHA-256: <code>{modalDoc.sha256_hash}</code> | Size: {(modalDoc.file_size_bytes / 1024).toFixed(1)} KB
+              <div className="modal-header-content">
+                <h3>📤 Upload Statutory Proof PDF</h3>
+                <p>
+                  Resolving: <strong>{proofCategoryName || proofType}</strong>
+                </p>
               </div>
-              <h4>Extracted Raw Text Stream:</h4>
-              <pre className="extracted-text-box">
-                {modalDoc.extracted_text || 'No text extracted from this PDF.'}
-              </pre>
+              <button 
+                className="close-modal-btn" 
+                disabled={isUploadingProof}
+                onClick={() => setIsProofModalOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 6 }}>
+                  Statutory Category:
+                </label>
+                <select 
+                  className="styled-select" 
+                  value={proofType} 
+                  onChange={(e) => setProofType(e.target.value)}
+                  style={{ width: '100%' }}
+                >
+                  <option value="LAND_REGISTRATION">Land Registration / Title Deed</option>
+                  <option value="BUILDING_PLAN_APPROVAL">Sanctioned Building Plan Approval</option>
+                  <option value="FIRE_SAFETY_NOC">Fire Safety NOC Certificate</option>
+                  <option value="AFFIDAVIT_TRUST">Registered Trust / Society Affidavit</option>
+                  <option value="ARCHITECT_CERTIFICATE">Architect Barrier-Free Certificate</option>
+                  <option value="SUPPORTING_ATTACHMENT">Supporting Statutory Attachment</option>
+                </select>
+              </div>
+
+              {/* Drag and Drop Zone */}
+              <div 
+                className={`dropzone-box ${isDragOver ? 'drag-active' : ''}`}
+                onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+                onDragLeave={() => setIsDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDragOver(false);
+                  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    setProofFile(e.dataTransfer.files[0]);
+                  }
+                }}
+                onClick={() => document.getElementById('proof-modal-file-input').click()}
+              >
+                <input 
+                  id="proof-modal-file-input"
+                  type="file" 
+                  accept=".pdf" 
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      setProofFile(e.target.files[0]);
+                    }
+                  }}
+                />
+                <div className="dropzone-icon">
+                  <FileUp />
+                </div>
+                <div className="dropzone-label">
+                  {proofFile ? proofFile.name : 'Choose statutory PDF or drag & drop here'}
+                </div>
+                <div className="dropzone-sub">
+                  {proofFile 
+                    ? `${(proofFile.size / 1024).toFixed(1)} KB • Click to change file` 
+                    : 'Statutory PDF proofs are cryptographically analyzed against AICTE norms'
+                  }
+                </div>
+
+                {proofFile && (
+                  <div className="file-preview-pill">
+                    <span>📄 {proofFile.name}</span>
+                    <button 
+                      type="button" 
+                      style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}
+                      onClick={(e) => { e.stopPropagation(); setProofFile(null); }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ marginTop: 14, padding: 12, borderRadius: 'var(--radius-sm)', background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.2)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                ℹ️ <strong>Automated Resolution:</strong> Upon upload, the system extracts statutory entities, verifies digital stream integrity, and automatically re-evaluates the APH-2024 compliance rules.
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                disabled={isUploadingProof}
+                onClick={() => setIsProofModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                className="btn btn-primary" 
+                disabled={!proofFile || isUploadingProof}
+                onClick={() => executeProofUpload(proofFile, proofType)}
+              >
+                {isUploadingProof ? 'Processing & Auditing...' : 'Ingest Proof & Resolve Deficiency'}
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Add College & Run Test Modal */}
+      {/* MODAL 2: Document Proof Inspector */}
+      {inspectorDoc && (
+        <div className="modal-backdrop" onClick={() => setInspectorDoc(null)}>
+          <div className="modal-card wide-modal" style={{ maxWidth: 840 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-header-content">
+                <h3>🔬 Statutory Document Proof Inspector</h3>
+                <p>
+                  <strong>{inspectorDoc.document_type}</strong> • {inspectorDoc.original_filename}
+                </p>
+              </div>
+              <button className="close-modal-btn" onClick={() => setInspectorDoc(null)}>✕</button>
+            </div>
+
+            {/* Inspector Navigation Tabs */}
+            <div className="inspector-tabs">
+              <button 
+                className={`inspector-tab-btn ${inspectorTab === 'forensic' ? 'active' : ''}`}
+                onClick={() => setInspectorTab('forensic')}
+              >
+                <ShieldAlert size={15} /> Forensic & Structural Integrity
+              </button>
+              <button 
+                className={`inspector-tab-btn ${inspectorTab === 'text' ? 'active' : ''}`}
+                onClick={() => setInspectorTab('text')}
+              >
+                <FileText size={15} /> Extracted Statutory Text
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
+              {inspectorTab === 'forensic' ? (
+                <div>
+                  {/* Forensic Key Parameters Grid */}
+                  <div className="forensic-grid">
+                    <div className="forensic-stat">
+                      <div className="forensic-label">Cryptographic Fingerprint (SHA-256)</div>
+                      <div className="forensic-val" style={{ fontSize: '0.75rem', fontFamily: 'monospace' }}>
+                        {inspectorDoc.sha256_hash}
+                      </div>
+                    </div>
+                    <div className="forensic-stat">
+                      <div className="forensic-label">File Size & Type</div>
+                      <div className="forensic-val">
+                        {(inspectorDoc.file_size_bytes / 1024).toFixed(1)} KB • {inspectorDoc.mime_type || 'application/pdf'}
+                      </div>
+                    </div>
+                    <div className="forensic-stat">
+                      <div className="forensic-label">Upload Timestamp</div>
+                      <div className="forensic-val" style={{ fontSize: '0.8rem' }}>
+                        {new Date(inspectorDoc.created_at || Date.now()).toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Metadata & Tamper Observations */}
+                  <h4 style={{ color: '#fff', fontSize: '0.92rem', marginBottom: 10 }}>Forensic Stream Inspection</h4>
+                  {inspectorDoc.meta ? (
+                    <div className="glass-card" style={{ background: 'rgba(15, 23, 42, 0.4)', padding: 14 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+                        <div>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>PDF Producer / Creator:</span>
+                          <div style={{ fontSize: '0.85rem', color: '#fff', fontWeight: 500 }}>
+                            {inspectorDoc.meta.metadata?.Producer || inspectorDoc.meta.metadata?.Creator || 'Standard Certified PDF'}
+                          </div>
+                        </div>
+                        <div>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>Incremental Revisions (%%EOF):</span>
+                          <div style={{ fontSize: '0.85rem', color: '#fff', fontWeight: 500 }}>
+                            {inspectorDoc.meta.eof_count !== undefined ? inspectorDoc.meta.eof_count : 1} Stream(s)
+                          </div>
+                        </div>
+                        <div>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>Creation Timestamp:</span>
+                          <div style={{ fontSize: '0.85rem', color: '#fff', fontWeight: 500 }}>
+                            {inspectorDoc.meta.metadata?.CreationDate || 'Compliant with statutory issue date'}
+                          </div>
+                        </div>
+                      </div>
+
+                      {inspectorDoc.meta.observations && inspectorDoc.meta.observations.length > 0 && (
+                        <div style={{ marginTop: 14 }}>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--warning)', fontWeight: 600 }}>Observations Detected:</span>
+                          <ul style={{ paddingLeft: 18, marginTop: 4, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                            {inspectorDoc.meta.observations.map((obs, i) => (
+                              <li key={i}>{obs}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No structural anomalies recorded.</p>
+                  )}
+
+                  <div style={{ marginTop: 16, display: 'flex', gap: 10 }}>
+                    <button 
+                      className="btn btn-secondary" 
+                      onClick={() => handleClassifyDoc(inspectorDoc.id)}
+                    >
+                      🤖 Run SA-01 Subagent Classification
+                    </button>
+                    <button 
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        navigator.clipboard.writeText(inspectorDoc.sha256_hash);
+                        showToast('Copied', 'SHA-256 fingerprint copied to clipboard', 'info');
+                      }}
+                    >
+                      <Copy size={13} /> Copy SHA-256 Hash
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div className="search-stream-bar">
+                    <Search size={16} color="var(--text-dim)" />
+                    <input 
+                      type="text" 
+                      className="search-stream-input" 
+                      placeholder="Filter or search in extracted document text..."
+                      value={textSearch}
+                      onChange={(e) => setTextSearch(e.target.value)}
+                    />
+                    {textSearch && (
+                      <button 
+                        className="btn btn-secondary" 
+                        style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+                        onClick={() => setTextSearch('')}
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+
+                  <pre className="code-stream-viewer">
+                    {inspectorDoc.extracted_text 
+                      ? (textSearch 
+                          ? inspectorDoc.extracted_text.split('\n').filter(line => line.toLowerCase().includes(textSearch.toLowerCase())).join('\n') || 'No lines match your search filter.'
+                          : inspectorDoc.extracted_text)
+                      : 'No text stream extracted from this PDF.'
+                    }
+                  </pre>
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => setInspectorDoc(null)}
+              >
+                Close Inspector
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: Custom Themed Confirmation Dialog */}
+      {confirmDialog.isOpen && (
+        <div className="modal-backdrop" onClick={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}>
+          <div className="confirm-box" onClick={(e) => e.stopPropagation()}>
+            <div className="confirm-icon">⚠️</div>
+            <h3 className="confirm-title">{confirmDialog.title}</h3>
+            <p className="confirm-desc">{confirmDialog.message}</p>
+            <div className="confirm-actions">
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                className="btn btn-primary" 
+                onClick={confirmDialog.confirmAction}
+              >
+                {confirmDialog.confirmText}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: Add College & Run Test Modal */}
       {isAddModalOpen && (
         <div className="modal-backdrop" onClick={() => !isAdding && setIsAddModalOpen(false)}>
           <div className="modal-card wide-modal" onClick={(e) => e.stopPropagation()}>
@@ -1119,10 +1737,11 @@ export default function App() {
                   </div>
 
                   <div className="form-group">
-                    <label>Campus Address</label>
+                    <label>Postal / Campus Address *</label>
                     <input 
                       type="text" 
                       className="form-input" 
+                      required
                       value={addForm.address}
                       onChange={(e) => setAddForm({...addForm, address: e.target.value})}
                     />
@@ -1132,16 +1751,15 @@ export default function App() {
                 {/* 2. Academic Program */}
                 <div className="form-section">
                   <div className="form-section-title">
-                    🎓 Academic Program Proposed
+                    🎓 Academic Program & Proposed Intake
                   </div>
                   <div className="form-row">
                     <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                      <label>Program / Discipline Name *</label>
+                      <label>Program / Department Name *</label>
                       <input 
                         type="text" 
                         className="form-input" 
                         required
-                        placeholder="e.g. Artificial Intelligence & Data Science" 
                         value={addForm.program_name}
                         onChange={(e) => setAddForm({...addForm, program_name: e.target.value})}
                       />
@@ -1153,19 +1771,18 @@ export default function App() {
                         value={addForm.level}
                         onChange={(e) => setAddForm({...addForm, level: e.target.value})}
                       >
-                        <option value="UG">Undergraduate (UG)</option>
-                        <option value="PG">Postgraduate (PG)</option>
-                        <option value="Diploma">Diploma</option>
+                        <option value="UG">Undergraduate (B.Tech / B.E.)</option>
+                        <option value="PG">Postgraduate (M.Tech / MBA)</option>
+                        <option value="DIPLOMA">Diploma</option>
                       </select>
                     </div>
                     <div className="form-group">
-                      <label>Approved Intake (Seats)</label>
+                      <label>Approved Intake (Students) *</label>
                       <input 
                         type="number" 
+                        min="30" 
+                        step="30" 
                         className="form-input" 
-                        min="30"
-                        max="600"
-                        step="30"
                         value={addForm.approved_intake}
                         onChange={(e) => setAddForm({...addForm, approved_intake: e.target.value})}
                       />
@@ -1363,7 +1980,7 @@ export default function App() {
                           </span>
                         </div>
                         <p className="scenario-desc">
-                          Creates profile with 0 documents. Test manual PDF uploads through the Documents Vault tab.
+                          Creates profile with 0 documents. Test manual PDF uploads through the Documents Vault tab or Final Judgment resolver.
                         </p>
                       </div>
                       <div style={{ fontSize: '0.72rem', color: 'var(--primary)', fontWeight: 600 }}>

@@ -80,6 +80,9 @@ class FinalJudgmentVerdict(BaseModel):
     # Complete What's Missing and Status Action Items
     actionable_checklist: ActionableChecklist
     
+    # SLM (Qwen 2.5) Scrutiny Analysis
+    slm_analysis: Optional[Dict[str, Any]] = None
+    
     # Statutory Safeguard
     statutory_disclaimer: str = (
         "BluePill is an automated assistive scrutiny tool. All findings, readiness classifications, "

@@ -248,3 +248,115 @@ async def answer_ask_bluepill_query(
         latency_ms=round(latency, 2),
         disclaimer="Advisory statutory summary. Formal decisions belong to the AICTE Scrutiny Committee."
     )
+
+async def analyze_dossier_with_slm(
+    db: Session,
+    application_id: str,
+    run_id: str
+) -> Optional[Dict[str, Any]]:
+    """
+    Executes SLM (Qwen 2.5:3b) comprehensive statutory scrutiny analysis over the application
+    and uploaded proofs, determining compliance, deficiencies, and missing mandates dynamically.
+    """
+    if not settings.LLM_ENABLED:
+        return None
+
+    app = db.query(Application).filter(Application.id == application_id).first()
+    if not app:
+        return None
+
+    docs = db.query(Document).filter(Document.application_id == application_id).all()
+    land = app.land_detail
+    built = app.builtup_detail
+
+    # Build prompt
+    docs_summary = []
+    uploaded_types = set()
+    for d in docs:
+        uploaded_types.add(d.document_type)
+        snippet = (d.extracted_text or "")[:400].replace("\n", " ").strip()
+        docs_summary.append(
+            f"- {d.document_type} ({d.original_filename}): SHA-256={d.sha256_hash[:16]}... Text snippet: \"{snippet}\""
+        )
+
+    all_mandates = [
+        "LAND_REGISTRATION",
+        "BUILDING_PLAN_APPROVAL",
+        "FIRE_SAFETY_NOC",
+        "AFFIDAVIT_TRUST",
+        "ARCHITECT_CERTIFICATE"
+    ]
+    missing_docs = [m for m in all_mandates if m not in uploaded_types]
+
+    prompt = f"""You are the AICTE BluePill Statutory Scrutiny Engine powered by Qwen 2.5.
+Analyze the following technical institution application dossier and uploaded document proofs per AICTE APH 2024-25 statutory norms:
+
+APPLICATION DOSSIER:
+- Institution Name: {app.institution_name}
+- Application Number: {app.application_number}
+- Institution Type: {app.institution_type}
+- State / District: {app.state}, {app.district}
+- Declared Land Area: {land.total_area_acres if land else 0} Acres (Single Contiguous Plot: {land.is_single_plot if land else False}, Survey No: {land.survey_khasra_no if land else 'N/A'})
+- Declared Built-up Space: Carpet Area = {built.total_carpet_sqm if built else 0} sq.m, Instructional Area = {built.instructional_area_sqm if built else 0} sq.m
+
+SUBMITTED PROOFS ({len(docs)} uploaded):
+{chr(10).join(docs_summary) if docs_summary else "No documents uploaded."}
+
+MISSING STATUTORY MANDATES DETECTED:
+{chr(10).join([f"- {m}" for m in missing_docs]) if missing_docs else "None (all 5 mandatory document categories present)."}
+
+AICTE APH 2024-25 STATUTORY NORMS:
+1. Land Norm: Minimum 7.5 Acres in a single contiguous plot.
+2. Built-up Norm: Minimum 6,000 sq.m carpet area and 3,000 sq.m instructional area.
+3. Completeness: All 5 mandatory documents (Land Deed, Building Plan Approval, Fire Safety NOC, Trust Affidavit, Architect Certificate) must be submitted.
+4. Cross-Document Consistency: Acreage and survey numbers in application must match Land Registration Deed text.
+
+Analyze this application dossier and return a JSON object with EXACTLY the following keys:
+- "overall_readiness": "READY_FOR_REVIEW" if 100% compliant, "INCOMPLETE" if documents are missing, "CRITICAL_ISSUES" if land/space norms fail, "HAS_ISSUES" if discrepancies exist.
+- "compliance_score_pct": integer between 0 and 100.
+- "verdict_headline": authoritative regulatory headline summarizing status.
+- "verdict_explanation": detailed scrutiny narrative explaining what meets norms, what is missing, and required remediations.
+- "missing_items": list of strings detailing what proofs/items are missing.
+- "critical_deficiencies": list of strings detailing any norm failures or discrepancies.
+"""
+
+    t0 = time.time()
+    try:
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            resp = await client.post(
+                f"{settings.OLLAMA_BASE_URL}/api/generate",
+                json={
+                    "model": settings.OLLAMA_MODEL,
+                    "prompt": prompt,
+                    "format": "json",
+                    "stream": False
+                }
+            )
+            if resp.status_code == 200:
+                raw_json = resp.json().get("response", "{}")
+                data = json.loads(raw_json)
+                latency = round((time.time() - t0) * 1000, 2)
+                
+                # Sanitize narrative
+                data["verdict_explanation"] = sanitize_agent_output(data.get("verdict_explanation", ""))
+                data["engine"] = f"Qwen 2.5 (3B) Local SLM"
+                data["latency_ms"] = latency
+                
+                # Record trace in database
+                trace = AgentTrace(
+                    id=str(uuid.uuid4()),
+                    agent_name="SLM-Scrutiny-Analyzer",
+                    prompt_snapshot=f"Analyze application {app.application_number} with {len(docs)} proofs",
+                    tool_calls_json=json.dumps({"run_id": run_id, "application_id": application_id}),
+                    sanitized_output=data.get("verdict_explanation", "")[:1000],
+                    latency_ms=latency,
+                    status="SUCCESS"
+                )
+                db.add(trace)
+                db.commit()
+                return data
+    except Exception as e:
+        print(f"SLM scrutiny analysis fallback: {e}")
+        return None
+    return None
+
