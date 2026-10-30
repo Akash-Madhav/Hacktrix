@@ -7,13 +7,35 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://127.0.0.1:8000',
-      '/applications': 'http://127.0.0.1:8000',
-      '/runs': 'http://127.0.0.1:8000',
-      '/agent': 'http://127.0.0.1:8000',
-      '/documents': 'http://127.0.0.1:8000',
-      '/health': 'http://127.0.0.1:8000',
-      '/system': 'http://127.0.0.1:8000',
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/applications': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/runs': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/agent': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/documents': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/health': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/system': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
     }
   }
 })

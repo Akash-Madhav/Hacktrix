@@ -176,6 +176,45 @@ def create_college(payload: CollegeCreatePayload, db: Session = Depends(get_db))
         "working_days_sla": sla_days
     }
 
+@router.post("/ai-update")
+@router.post("/ai-update/")
+@router.post("/ai_update")
+def ai_update_college(payload: AIUpdatePayload, db: Session = Depends(get_db)):
+    """Natural Language AI Update powered by Qwen 2.5 SLM."""
+    from app.services.ai_update_service import apply_ai_college_update
+    try:
+        result = apply_ai_college_update(db, payload.college_name, payload.update_text)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI update failed: {e}")
+
+@router.get("/ai-update", include_in_schema=False)
+@router.get("/ai-update/", include_in_schema=False)
+def ai_update_info():
+    return {"status": "ONLINE", "message": "NIRIKSHA AI Update endpoint active. Send a POST request with college_name and update_text."}
+
+@router.post("/purge-all", status_code=status.HTTP_200_OK)
+def purge_all_data():
+    """Wipes all records for a clean slate."""
+    from app.data.clear_database import clear_all_tables
+    clear_all_tables()
+    return {"status": "SUCCESS", "message": "All college monitoring data purged completely."}
+
+@router.post("/{college_id}")
+def handle_college_post_fallback(college_id: str, payload: Dict[str, Any], db: Session = Depends(get_db)):
+    """Catches any routing edge case where Starlette captures ai-update under {college_id}."""
+    if college_id in ("ai-update", "ai_update"):
+        p = AIUpdatePayload(
+            college_name=payload.get("college_name", ""),
+            update_text=payload.get("update_text", "")
+        )
+        return ai_update_college(p, db)
+    if college_id == "purge-all":
+        return purge_all_data()
+    raise HTTPException(status_code=405, detail="POST not supported on direct college entity. Use /{college_id}/transition.")
+
 @router.get("/{college_id}")
 def get_college_details(college_id: str, db: Session = Depends(get_db)):
     """Fetch complete college profile, timeline, and 'where is where' lifecycle progression."""
@@ -307,22 +346,3 @@ def delete_college(college_id: str, db: Session = Depends(get_db)):
     db.commit()
 
     return {"status": "SUCCESS", "message": f"College '{app.institution_name}' removed from monitoring."}
-
-@router.post("/ai-update")
-async def ai_update_college(payload: AIUpdatePayload, db: Session = Depends(get_db)):
-    """Natural Language AI Update powered by Qwen 2.5 SLM."""
-    from app.services.ai_update_service import apply_ai_college_update
-    try:
-        result = await apply_ai_college_update(db, payload.college_name, payload.update_text)
-        return result
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI update failed: {e}")
-
-@router.post("/purge-all", status_code=status.HTTP_200_OK)
-def purge_all_data():
-    """Wipes all records for a clean slate."""
-    from app.data.clear_database import clear_all_tables
-    clear_all_tables()
-    return {"status": "SUCCESS", "message": "All college monitoring data purged completely."}

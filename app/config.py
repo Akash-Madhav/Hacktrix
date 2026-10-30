@@ -65,7 +65,7 @@ class Settings(BaseSettings):
 
     UPLOAD_DIR: Path = BASE_DIR / "uploads"
     SYNTHETIC_DIR: Path = BASE_DIR / "synthetic_data"
-    MODELS_DIR: Path = BASE_DIR / "models"
+    MODELS_DIR: Path = (BASE_DIR / "app" / "models") if (BASE_DIR / "app" / "models" / "qwen2.5-3b-instruct.gguf").exists() else (BASE_DIR / "models")
     MODEL_PATH: Path = MODELS_DIR / "qwen2.5-3b-instruct.gguf"
     
     # LLM Settings

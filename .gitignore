@@ -125,3 +125,5 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+app/models/*.gguf

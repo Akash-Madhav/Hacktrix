@@ -171,15 +171,29 @@ export default function App() {
     setAiSubmitting(true);
     setAiResult(null);
 
-    fetch('/api/colleges/ai-update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        college_name: aiCollegeQuery,
-        update_text: aiUpdateText
-      })
-    })
+    const payload = JSON.stringify({
+      college_name: aiCollegeQuery,
+      update_text: aiUpdateText
+    });
+
+    const sendRequest = (endpoint) => {
+      return fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: payload
+      });
+    };
+
+    sendRequest('/api/colleges/ai-update')
       .then(async res => {
+        if (res.status === 405 || res.status === 404) {
+          // Fallback retry on alternative alias
+          const retryRes = await sendRequest('/api/colleges/ai_update');
+          if (retryRes.ok) return retryRes.json();
+        }
         if (!res.ok) {
           const errData = await res.json().catch(() => null);
           throw new Error(errData?.detail || `Error ${res.status}`);

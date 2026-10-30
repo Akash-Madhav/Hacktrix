@@ -3,13 +3,14 @@ import time
 import uuid
 import logging
 from pathlib import Path
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, Depends
+from sqlalchemy.orm import Session
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from app.config import settings
-from app.database import Base, engine
+from app.database import Base, engine, get_db
 from app.routers import (
     health,
     applications,
@@ -132,6 +133,14 @@ app.include_router(audit.router)
 app.include_router(rules_studio.router)
 app.include_router(colleges.router)
 
+# Direct Root-Level Mount for AI Update (bypasses any router-level precedence collision)
+@app.post("/api/colleges/ai-update", tags=["College Monitoring MVP"])
+@app.post("/api/colleges/ai-update/", include_in_schema=False)
+@app.post("/api/colleges/ai_update", include_in_schema=False)
+def app_direct_ai_update(payload: colleges.AIUpdatePayload, db: Session = Depends(get_db)):
+    """Direct root-level handler for AI updates."""
+    return colleges.ai_update_college(payload, db)
+
 # Static root files helper
 @app.get("/favicon.svg", include_in_schema=False)
 def get_favicon():
@@ -169,8 +178,8 @@ def serve_index():
     }
 
 # SPA client-side routing fallback (for non-API paths)
-@app.get("/{full_path:path}", include_in_schema=False)
-def serve_spa_fallback(full_path: str):
+@app.api_route("/{full_path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
+def serve_spa_fallback(request: Request, full_path: str):
     # Exclude system API prefixes from fallback
     api_prefixes = (
         "api", "applications", "documents", "validations", "agent",
@@ -178,7 +187,7 @@ def serve_spa_fallback(full_path: str):
         "undertakings", "validity", "evc", "audit", "rules",
         "health", "docs", "redoc", "openapi.json", "system"
     )
-    if any(full_path.startswith(prefix) for prefix in api_prefixes):
+    if any(full_path.startswith(prefix) for prefix in api_prefixes) or request.method != "GET":
         return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "message": f"Endpoint /{full_path} not found"})
 
     index_file = react_dist / "index.html"

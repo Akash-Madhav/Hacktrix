@@ -46,8 +46,9 @@ def run():
         # Windows environment: WinSock does not support socket sharing across spawned processes (WinError 10022).
         # Run single-process high-throughput async event loop on Windows.
         import uvicorn
-        print(f"[LAUNCH] Starting Uvicorn on http://{host}:{port} (Windows Async Mode)...")
-        uvicorn.run("app.main:app", host=host, port=port, log_level=os.getenv("LOG_LEVEL", "info").lower())
+        auto_reload = os.getenv("RELOAD", "true").lower() in ("true", "1", "yes")
+        print(f"[LAUNCH] Starting Uvicorn on http://{host}:{port} (Windows Mode | Auto-Reload: {auto_reload})...")
+        uvicorn.run("app.main:app", host=host, port=port, log_level=os.getenv("LOG_LEVEL", "info").lower(), reload=auto_reload)
     else:
         # Linux / Container environment: Run Gunicorn with Uvicorn workers
         print(f"[LAUNCH] Starting Gunicorn ASGI server on http://{host}:{port} using gunicorn.conf.py...")
