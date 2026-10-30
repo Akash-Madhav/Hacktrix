@@ -62,9 +62,33 @@ def create_application(payload: ApplicationCreate, db: Session = Depends(get_db)
     )
 
 @router.get("", response_model=List[ApplicationResponse])
-def list_applications(skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
-    """Lists all submitted applications."""
-    return db.query(Application).offset(skip).limit(limit).all()
+def list_applications(
+    skip: int = 0,
+    limit: int = 100,
+    region: str = None,
+    stage: str = None,
+    sla_status: str = None,
+    pathway: str = None,
+    search: str = None,
+    db: Session = Depends(get_db)
+):
+    """Lists submitted applications with optional filters."""
+    query = db.query(Application)
+    if region:
+        query = query.filter(Application.region == region)
+    if stage:
+        query = query.filter(Application.current_stage == stage)
+    if sla_status:
+        query = query.filter(Application.sla_status == sla_status)
+    if pathway:
+        query = query.filter(Application.pathway_code == pathway)
+    if search:
+        query = query.filter(
+            Application.institution_name.ilike(f"%{search}%") |
+            Application.application_number.ilike(f"%{search}%") |
+            Application.district.ilike(f"%{search}%")
+        )
+    return query.order_by(Application.created_at.desc()).offset(skip).limit(limit).all()
 
 @router.get("/{application_id}", response_model=ApplicationDetailResponse)
 def get_application(application_id: str, db: Session = Depends(get_db)):

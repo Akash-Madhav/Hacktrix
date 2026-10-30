@@ -37,12 +37,21 @@ class BuiltupDetailResponse(BuiltupDetailBase):
 
 class ApplicationBase(BaseModel):
     application_number: str
+    institution_permanent_id: Optional[str] = None
+    eoa_file_number: Optional[str] = None
     institution_name: str
     institution_type: str = "NEW_TECHNICAL_INSTITUTION"
     application_type: str = "NEW_INSTITUTION"
+    region: Optional[str] = "Western"
     state: str
     district: str
     address: Optional[str] = None
+    pathway_code: Optional[str] = "PATHWAY_SCRUTINY_EVC"
+    current_stage: Optional[str] = "INITIAL_SCRUTINY"
+    assigned_officer_id: Optional[str] = None
+    priority: Optional[str] = "NORMAL"
+    sla_status: Optional[str] = "ACTIVE"
+    stage_entered_at: Optional[datetime] = None
 
 class ApplicationCreate(ApplicationBase):
     programs: List[ProgramBase] = []

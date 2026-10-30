@@ -2,12 +2,11 @@ import json
 from fastapi.testclient import TestClient
 from app.main import app
 
-client = TestClient(app)
-
 def test_full_pipeline():
-    print("==================================================")
-    print("AICTE BLUEPILL VALIDATION WORKBENCH - TEST SUITE")
-    print("==================================================")
+    with TestClient(app) as client:
+        print("==================================================")
+        print("AICTE BLUEPILL VALIDATION WORKBENCH - TEST SUITE")
+        print("==================================================")
 
     # 0. Local Model Verification (/models)
     from app.config import settings

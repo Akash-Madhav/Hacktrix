@@ -1,0 +1,37 @@
+services:
+  niriksha:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: aicte-niriksha:latest
+    container_name: niriksha_control_room
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - DATABASE_URL=${DATABASE_URL:-sqlite:////app/bluepill.db}
+      - DB_POOL_SIZE=${DB_POOL_SIZE:-15}
+      - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-25}
+      - DB_POOL_TIMEOUT=${DB_POOL_TIMEOUT:-30}
+      - DB_POOL_RECYCLE=${DB_POOL_RECYCLE:-300}
+      - SECRET_KEY=${SECRET_KEY:-niriksha-production-secret-change-in-prod-f83b28d94e}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      - WEB_CONCURRENCY=${WEB_CONCURRENCY:-4}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - niriksha_uploads:/app/uploads
+      - niriksha_data:/app/synthetic_data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  niriksha_uploads:
+    name: niriksha_uploads_vol
+  niriksha_data:
+    name: niriksha_data_vol

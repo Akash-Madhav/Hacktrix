@@ -17,6 +17,9 @@ class Document(Base):
     file_size_bytes = Column(Integer, default=0)
     extracted_text = Column(Text, nullable=True)
     metadata_json = Column(Text, nullable=True)
+    validity_start_date = Column(DateTime, nullable=True)
+    expiry_date = Column(DateTime, nullable=True, index=True)
+    certificate_number = Column(String(128), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     application = relationship("Application", back_populates="documents")
